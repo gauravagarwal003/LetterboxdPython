@@ -83,7 +83,7 @@ def getRatingsforUser(username): # gets the ratings for a user
   baseURL = f"https://letterboxd.com/{username}/films/by/entry-rating/page/"
   pageNumber = 1
   pageHasFilms = True
-  returnList = []
+  result = set()
 
   while pageHasFilms: # continues until there are no more films
     response = requests.get(f"{baseURL}/{pageNumber}")
@@ -97,17 +97,17 @@ def getRatingsforUser(username): # gets the ratings for a user
               "div", class_="really-lazy-load").get("data-film-slug")
           ratingElement = container.find("span", class_="rating")
           if not ratingElement: # continues until movie doesn't have a rating, meaning there are no more movies with ratings
-            return returnList
-          rating = ratingElement.text.strip()
+            return result
+          rating = float(starsToInt[ratingElement.text.strip()])
           title = container.find("img", class_="image").get("alt")
-          returnList.append([filmID, title, rating])
+          result.add((filmID, title, rating))
 
         pageNumber += 1
       else:
         pageHasFilms = False
     else:
       pageHasFilms = False
-  return returnList
+  return result
 
 filmCache = loadRatingsFomFile(FILM_CACHE_FILE) # stores film info in filmCache
 moviesInCacheBefore = len(filmCache) # gets the number of movies in the cache before
@@ -127,9 +127,13 @@ totalVariance = 0
 cacheHit = 0
 validMovies = 0
 
+if len(userRatings) < MIN_MOVIES: # checks if user has rated enough valid movies
+  with open(PRINT_STATS_FILE, "a") as output:
+    output.write(f"{username} has only rated {len(userRatings)} movies.\n")
+  exit()
+
 for movie in tqdm(userRatings, desc=username):  # go through user's ratings
-    movieID, movieTitle, userRatingRaw = movie
-    userRating = float(starsToInt[userRatingRaw])
+    movieID, movieTitle, userRating = movie
     if movieID in filmCache: # checks if movie is in cache
         avgRating = filmCache[movieID]['average']
         cacheHit += 1
