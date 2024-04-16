@@ -1,11 +1,16 @@
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, SoupStrainer
 import requests
 import argparse
+import time
+import pickle
 
-
-from main import getRatingsforUser, loadRatingsFomFile, calculateVariance
-
-VARIANCE_DECIMALS = 3
+def loadRatingsFomFile(filename): # loads ratings
+  try:
+    with open(filename, "rb") as file:
+      film_cache = pickle.load(file)
+  except FileNotFoundError:
+    film_cache = {}
+  return film_cache 
 
 def parseArguments():
     parser = argparse.ArgumentParser()
@@ -13,7 +18,8 @@ def parseArguments():
     args = parser.parse_args()
     return args.username
 
-FILM_CACHE_FILE = "film_cache.pickle"
+start_time = time.time()
+FILM_CACHE_FILE = "pickles/film_cache.pickle"
 filmCache = loadRatingsFomFile(FILM_CACHE_FILE)
 username = parseArguments()
 
@@ -25,7 +31,8 @@ result = {}
 while pageHasFilms:
   response = requests.get(f"{baseURL}/{pageNumber}")
   if response.status_code == 200:
-    soup = BeautifulSoup(response.content, "html.parser")
+    soup = BeautifulSoup(response.text, "lxml", parse_only = SoupStrainer("tbody"))
+      
     tbody = soup.find('tbody')
     if tbody:
       tr_with_class = tbody.find_all('tr', class_=True)
@@ -37,7 +44,7 @@ while pageHasFilms:
 
           if td_film_details:
             div_film_slug = td_film_details.find('div',
-                                                 {'data-film-slug': True})
+                                                {'data-film-slug': True})
 
             if div_film_slug:
               film_slug = div_film_slug['data-film-slug']
@@ -54,12 +61,9 @@ while pageHasFilms:
     pageHasFilms = False
 
 filtered_dict = {key: value for key, value in result.items() if value > 1}
-
-# Sort the filtered dictionary by values in descending order
 sorted_filtered_dict = dict(
     sorted(filtered_dict.items(), key=lambda item: item[1], reverse=True))
 
-# Print the sorted dictionary
 for key, value in sorted_filtered_dict.items():
   result = filmCache.get(key)
   if result:
@@ -67,4 +71,3 @@ for key, value in sorted_filtered_dict.items():
   else:
     print(key, ":", value)
 
-  
