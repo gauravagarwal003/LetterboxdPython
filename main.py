@@ -3,7 +3,7 @@ import argparse
 import re
 import time
 from tqdm import tqdm
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, SoupStrainer
 import requests
 
 starsToInt = { # Maps stars ('★★★½') to a number (3.5)
@@ -22,8 +22,8 @@ starsToInt = { # Maps stars ('★★★½') to a number (3.5)
 MIN_MOVIES = 30 # minimum number of films user must rate to be considered
 MAX_LEADERBOARD_SIZE = 1000 # how many users will be shown on leadeboard
 MIN_TOTAL_RATINGS =  500 # minimum number of ratings a film must have to be considered
-FILM_CACHE_FILE = "film_cache.pickle" # file where film info is stored
-LEADERBOARD_FILE = "leaderboard.pickle" # file where leaderboard is stored
+FILM_CACHE_FILE = "pickles/film_cache.pickle" # file where film info is stored
+LEADERBOARD_FILE = "pickles/leaderboard.pickle" # file where leaderboard is stored
 PRINT_STATS_FILE = "stats.txt" # file where stats are printed
 PRINT_LEADERBOARD_FILE = "leaderboard.txt" # file where leaderboard is printed
 VARIANCE_DECIMALS = 4 # number of decimal places to round variance to
@@ -84,12 +84,11 @@ def getRatingsforUser(username): # gets the ratings for a user
   pageNumber = 1
   pageHasFilms = True
   result = set()
-
+  requestsSession = requests.Session()
   while pageHasFilms: # continues until there are no more films
-    response = requests.get(f"{baseURL}/{pageNumber}")
+    response = requestsSession.get(f"{baseURL}/{pageNumber}")
     if response.status_code == 200:
-      soup = BeautifulSoup(response.content, "html.parser")
-      poster_containers = soup.find_all("li", class_="poster-container")
+      poster_containers = BeautifulSoup(response.text, "lxml", parse_only= SoupStrainer("li", class_="poster-container"))
 
       if poster_containers:
         for container in poster_containers:
@@ -132,7 +131,8 @@ if len(userRatings) < MIN_MOVIES: # checks if user has rated enough valid movies
     output.write(f"{username} has only rated {len(userRatings)} movies.\n")
   exit()
 
-for movie in tqdm(userRatings, desc=username):  # go through user's ratings
+requestsSession = requests.Session()
+for movie in tqdm(userRatings, desc = f"{username}"):  # go through user's ratings
     movieID, movieTitle, userRating = movie
     if movieID in filmCache: # checks if movie is in cache
         avgRating = filmCache[movieID]['average']
@@ -140,9 +140,8 @@ for movie in tqdm(userRatings, desc=username):  # go through user's ratings
         validMovies += 1
       
     else: # movie not in cache
-        response = requests.get(f"https://letterboxd.com/csi/film/{movieID}/rating-histogram/")
-        html_string = response.content.decode('utf-8')
-        soup = BeautifulSoup(html_string, 'html.parser')
+        response = requestsSession.get(f"https://letterboxd.com/csi/film/{movieID}/rating-histogram/")
+        soup = BeautifulSoup(response.text, 'lxml')
 
         try: # try extracting the average ratings and total ratings
             ratingsText = soup.find('a', {'class': 'tooltip', 'title': True}).get('title')
@@ -158,7 +157,7 @@ for movie in tqdm(userRatings, desc=username):  # go through user's ratings
         dict['title'] = movieTitle
         dict['average'] = avgRating
         dict["Total"] = totalRatings
-        histogram = BeautifulSoup(response.content, "lxml").find_all("li", {"class": "rating-histogram-bar"}) # get histogram
+        histogram = BeautifulSoup(response.text, "lxml", parse_only = SoupStrainer("li", class_="rating-histogram-bar")) # get histogram
         for i, r in enumerate(histogram): # go through histogram
             string = r.text.strip(" ")
             if string == "":

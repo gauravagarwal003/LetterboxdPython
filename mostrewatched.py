@@ -27,13 +27,13 @@ baseURL = f"https://letterboxd.com/{username}/films/diary/page"
 pageNumber = 1
 pageHasFilms = True
 result = {}
+requestsSession = requests.Session()
 
 while pageHasFilms:
-  response = requests.get(f"{baseURL}/{pageNumber}")
+  response = requestsSession.get(f"{baseURL}/{pageNumber}")
   if response.status_code == 200:
-    soup = BeautifulSoup(response.text, "lxml", parse_only = SoupStrainer("tbody"))
+    tbody = BeautifulSoup(response.text, "lxml", parse_only = SoupStrainer("tbody"))
       
-    tbody = soup.find('tbody')
     if tbody:
       tr_with_class = tbody.find_all('tr', class_=True)
       if tr_with_class:
@@ -63,11 +63,5 @@ while pageHasFilms:
 filtered_dict = {key: value for key, value in result.items() if value > 1}
 sorted_filtered_dict = dict(
     sorted(filtered_dict.items(), key=lambda item: item[1], reverse=True))
-
-for key, value in sorted_filtered_dict.items():
-  result = filmCache.get(key)
-  if result:
-    print(result['title'], ":", value)
-  else:
-    print(key, ":", value)
-
+  
+print("--- %s seconds ---" % (time.time() - start_time))
