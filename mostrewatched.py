@@ -18,6 +18,13 @@ def parseArguments():
     args = parser.parse_args()
     return args.username
 
+def checkIfUserExists(username):
+  response = requestsSession.get(f"https://letterboxd.com/{username}/")
+  if response.status_code == 200:
+    return True
+  else:
+    return False
+
 start_time = time.time()
 FILM_CACHE_FILE = "pickles/film_cache.pickle"
 filmCache = loadRatingsFomFile(FILM_CACHE_FILE)
