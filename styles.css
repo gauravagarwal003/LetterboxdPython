@@ -1,68 +1,140 @@
 :root {
-    --letterboxdOrange: #ef8733;
-    --letterboxdGreen: #66dd67;
-    --letterboxdBlue: #66b9ef;
-    --white: rgb(255 255 255);
-    --black: rgb(0 0 0);
-    --gray: rgb(30 30 40);
+  --letterboxdOrange: #ef8733;
+  --letterboxdGreen: #66dd67;
+  --letterboxdBlue: #66b9ef;
+  --white: rgb(255 255 255);
+  --black: rgb(0 0 0);
+  --gray: rgb(30 30 40);
 }
 
 @font-face {
-    font-family: 'LetterBoxdFont';
-    src: url('sharp-grotesk-smbold-20-regular.woff2') format('woff2');
-    font-weight: normal;
-    font-style: normal;
-  }
-  
+  font-family: 'LetterBoxdFont';
+  src: url('sharp-grotesk-smbold-20-regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+}
 
 body {
-    font-family: 'LetterBoxdFont';
-    margin: 0;
-    padding: 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    background-color: var(--gray);
-  }
-  
-  .container {
-    text-align: center;
-    background-color: #fff;
-    border-radius: 10px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    padding: 20px;
-  }
-  
-  input[type="text"],
-  input[type="number"],
-  button {
-    padding: 10px;
-    margin: 5px;
-    border: none;
-    border-radius: 5px;
-    outline: none;
-  }
-  
-  button {
-    background-color: #007bff;
-    color: #fff;
-    cursor: pointer;
-  }
-  
-  button:hover {
-    background-color: #0056b3;
-  }
-  
-  ul {
-    list-style-type: none;
-    padding: 0;
-  }
-  
-  li {
-    padding: 10px;
-    margin: 5px;
-    background-color: #e9e9e9;
-    border-radius: 5px;
-  }
-  
+  font-family: 'LetterBoxdFont';
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background-color: var(--gray);
+}
+
+.content {
+  background-color: rgb(230, 230, 230);
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+}
+
+.title {
+  color: var(--letterboxdOrange);
+  font-size: 30px;
+  padding-bottom: 4%;
+}
+
+.textBoxes {
+  position: relative;
+  padding: 10px 0 0;
+  width: 100%;
+  max-width: 40%;
+  float: left;
+}
+
+.textBox {
+  font-family: inherit;
+  width: 100%;
+  border: none;
+  border-bottom: 2px solid #9b9b9b;
+  outline: 0;
+  font-size: 17px;
+  color: black;
+  padding: 7px 0;
+  background: transparent;
+  transition: border-color 0.2s;
+}
+
+.textBox::placeholder {
+  color: transparent;
+}
+
+.textBox:placeholder-shown~.textBoxLabel {
+  font-size: 17px;
+  cursor: text;
+  top: 20px;
+}
+
+.textBoxLabel {
+  position: absolute;
+  top: 0;
+  display: block;
+  transition: 0.2s;
+  font-size: 17px;
+  color: #9b9b9b;
+  pointer-events: none;
+}
+
+.textBox:not(:placeholder-shown),
+.textBox:focus {
+  padding-top: 10px;
+  font-weight: 700;
+  border-width: 3px;
+  border-image: linear-gradient(to right, var(--letterboxdGreen), var(--letterboxdGreen));
+  border-image-slice: 1;
+}
+
+.textBox:not(:placeholder-shown)~.textBoxLabel,
+.textBox:focus~.textBoxLabel {
+  position: absolute;
+  top: 0;
+  display: block;
+  transition: 0.2s;
+  font-size: 17px;
+  color: var(--letterboxdGreen);
+  font-weight: 700;
+}
+
+.textBox:required,
+.textBox:invalid {
+  box-shadow: none;
+}
+
+button {
+  /* Variables */
+  --button_radius: 0.75em;
+  --button_color: var(--letterboxdBlue);
+  --button_outline_color: #000000;
+  font-size: 17px;
+  font-weight: bold;
+  border: none;
+  padding: 0em 0em;
+  border-radius: var(--button_radius);
+  background: var(--button_outline_color);
+  float:right;
+
+}
+
+.button_top {
+  display: block;
+  box-sizing: border-box;
+  border: 2px solid var(--button_outline_color);
+  border-radius: var(--button_radius);
+  padding: 0.75em 1.5em;
+  background: var(--button_color);
+  color: var(--button_outline_color);
+  transform: translateY(-0.2em);
+  transition: transform 0.1s ease;
+}
+
+button:hover .button_top {
+  transform: translateY(-0.35em);
+}
+
+button:active .button_top {
+  transform: translateY(0);
+}

@@ -9,18 +9,26 @@
 </head>
 
 <body style="position: relative;">
-    <div class="container">
-        <h1>Movie Variances</h1>
-        <form id="user-form">
-            <label for="username">Username:</label>
-            <input type="text" id="username" name="username" required>
-            <label for="number">Number:</label>
-            <input type="number" id="number" name="number" required>
-            <button type="submit">Generate List</button>
-        </form>
-        <ul id="user-list"></ul>
-    </div>
-    <script src="script.js"></script>
+    <div class="content">
+        <div class="title">
+            Most Rewatched Letterboxd Movies
+        </div>
+        <div class="textBoxes">
+            <input type="input" class="textBox" id="usernameInput" placeholder="Username" required="">
+            <label for="name" class="textBoxLabel">Username</label>
+        </div>
+        <button id="submitButton">
+            <span class="button_top"> Submit
+            </span>
+        </button>
+        <div id="movieList">
+            <ul id="movieListUl">
+            </ul>
+
+            </ul>
+        </div>
+
+        <script type="module" src="script.js"></script>
 </body>
 
 </html>
