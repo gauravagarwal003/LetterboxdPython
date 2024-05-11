@@ -49,5 +49,16 @@ coverage.xml
 # Sphinx documentation
 docs/_build/
 
-*.pickle
-*.txt
+# Ignore macOS .DS_Store files
+.DS_Store
+
+# Ignore settings.json
+settings.json
+
+# Ignore CSV files
+*.csv
+
+# Ignore .cfg files
+*.cfg
+.pickle
+.txt
