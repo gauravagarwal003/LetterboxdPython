@@ -70,5 +70,6 @@ while pageHasFilms:
 filtered_dict = {key: value for key, value in result.items() if value > 1}
 sorted_filtered_dict = dict(
     sorted(filtered_dict.items(), key=lambda item: item[1], reverse=True))
-  
+
+print(sorted_filtered_dict)
 print("--- %s seconds ---" % (time.time() - start_time))

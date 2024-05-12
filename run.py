@@ -15,11 +15,10 @@ def usernameInLeaderBoard(username, leaderboard):
   leaderboard_usernames = [tup[1] for tup in leaderboard]
   return username in leaderboard_usernames
 
-LEADERBOARD_FILE = "leaderboard.pickle"
-
+LEADERBOARD_FILE = "pickles/leaderboard.pickle"
 usernames = []
 
-for number in range(1, 10):
+for number in range(20, 21):
   url = f"https://letterboxd.com/members/popular/this/month/page/{number}/"
   response = requests.get(url)
   if response.status_code == 200:

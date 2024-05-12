@@ -88,7 +88,7 @@ def getRatingsforUser(username): # gets the ratings for a user
   while pageHasFilms: # continues until there are no more films
     response = requestsSession.get(f"{baseURL}/{pageNumber}")
     if response.status_code == 200:
-      poster_containers = BeautifulSoup(response.text, "lxml", parse_only= SoupStrainer("li", class_="poster-container"))
+      poster_containers = BeautifulSoup(response.text, "html.parser", parse_only= SoupStrainer("li", class_="poster-container"))
 
       if poster_containers:
         for container in poster_containers:
