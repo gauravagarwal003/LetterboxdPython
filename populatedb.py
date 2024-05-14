@@ -238,12 +238,12 @@ def addMovieToDatabase(movieID):
     
     # add listAppearances
     data['numListAppearances'] = 0
-    notAllowed = ['(uncredited)', '(archive footage)', '(voice / uncredited)', '(voice/uncredited)', '(unconfirmed)', '(uncredited voice)', '(voice, uncredited)']
     aTag = soupLikes.find("a", href=f"/film/{movieID}/lists/")
     if aTag and aTag.has_attr("title"):
         data['numListAppearances'] = int(''.join(filter(str.isdigit, aTag["title"])))
     
     # add cast
+    notAllowed = ['(uncredited)', '(archive footage)', '(voice / uncredited)', '(voice/uncredited)', '(unconfirmed)', '(uncredited voice)', '(voice, uncredited)']
     responseCast = requestsSession.get(f"https://letterboxd.com/film/{movieID}/")
     soup = BeautifulSoup(responseCast.text, 'lxml')
     data['cast'] = []
@@ -251,12 +251,13 @@ def addMovieToDatabase(movieID):
     if castList:
         actors = castList.find_all('a', class_ = 'text-slug tooltip')
         for actor in actors:
-            add = True
-            for rule in notAllowed:
-                if rule in actor.get('title'):
-                    add = False
-            if add:
-                data['cast'].append(actor.get('href'))
+            if actor.get('title'):
+                add = True
+                for rule in notAllowed:
+                    if rule in actor.get('title'):
+                        add = False
+                if add:
+                    data['cast'].append(actor.get('href'))
     
     # add producers
     data['producers'] = []
