@@ -4,6 +4,7 @@ import requests
 import json
 from bs4 import BeautifulSoup, SoupStrainer
 import time
+from functions import *
 
 minViews = 25000
 pagesPerFilm = 72
@@ -22,19 +23,7 @@ starsToInt = { # Maps stars ('★★★½') to a string ('3_5')
     "★★★★★": '5',
 }
 
-def ceilDiv(a, b):
-  return -(a // -b)
-
-def getNumberMoviesWatched(username):
-    response = requestsSession.get(f"https://letterboxd.com/{username}/")
-    soup = BeautifulSoup(response.text, "lxml")
-    first_h4 = soup.find('h4', class_='profile-statistic')
-    span_value = first_h4.find('span', class_='value')
-    text_inside_span = span_value.get_text()
-    numMovies = int(''.join(c for c in text_inside_span if c.isdigit()))
-    return numMovies
-
-def getRatingsforUser(username):
+def getMoviesWatchedForUser(username):
   numPages = ceilDiv(getNumberMoviesWatched(username), pagesPerFilm)
   baseURL = f"https://letterboxd.com/{username}/films/by/entry-rating/page/"
   result = []
@@ -49,16 +38,6 @@ def getRatingsforUser(username):
                               class_="really-lazy-load").get("data-film-slug")
       result.append((filmID))
   return result
-
-def isMovieInDatabase(movieID):
-    try:
-        df = pd.read_csv('movies.csv')
-        if df.empty:
-            return False
-        else:
-            return movieID in df['movieID'].values
-    except pd.errors.EmptyDataError:
-        return False
     
 def addMovieToDatabase(movieID):
     if isMovieInDatabase(movieID):
@@ -71,23 +50,11 @@ def addMovieToDatabase(movieID):
     soupLikes = BeautifulSoup(responseLikes.text, 'lxml')
 
     # check if movie satisfies minimum views
-    aTag = soupLikes.find("a", href=f"/film/{movieID}/members/")
-    if aTag and aTag.has_attr("title"):
-        views = int(''.join(filter(str.isdigit, aTag["title"])))
-        if views < minViews:
-            return False
-    else:
+    if getnumViews(True, movieID, soupLikes) < minViews:
         return False
-    
+        
     # check if movie is a TV show or miniseries (according to TMDB link)
-    tmdbLink = soup.find_all('a', attrs={'data-track-action': 'TMDb'})
-    isMovie = False
-    for link in tmdbLink:
-        href = link.get('href')
-        if href and "/movie/" in href:
-            isMovie = True
-            
-    if not isMovie:
+    if not isMovie(movieID, soup):
         return False
     
     responseHistogram = requestsSession.get(f"https://letterboxd.com/csi/film/{movieID}/rating-histogram/")
@@ -105,6 +72,15 @@ def addMovieToDatabase(movieID):
     
     # add movie id
     data['movieID'] = movieID 
+    
+    # add title
+    data['title'] = getnumViews(True, movieID, soupLikes)
+    
+    # add average rating
+    data['avgRating'] = getAverageRating(movieID)
+    
+    # add year
+    data['year'] = getReleaseYear(movieID, soup)
 
     scriptTag = soup.find('script', type='application/ld+json')
     if scriptTag:
@@ -113,25 +89,7 @@ def addMovieToDatabase(movieID):
         end_index = json_content.find('/* ]]> */')
         json_data = json_content[start_index:end_index].strip()
         jsonData = json.loads(json_data)
-
-        # add title
-        data['title'] = ""
-        if "name" in jsonData:
-            data['title'] = jsonData['name']
-        
-        # add average rating
-        data['avgRating'] = None
-        if "aggregateRating" in jsonData:
-            if "ratingValue" in jsonData['aggregateRating']:
-                data['avgRating'] = jsonData['aggregateRating']['ratingValue']                
-    # add year
-    data['year'] = None
-    releaseYearDiv = soup.find("div", class_="releaseyear")
-    if releaseYearDiv:
-        aTag = releaseYearDiv.find("a")
-        if aTag:
-            data['year'] = int(aTag.text.strip())
-    
+            
      # add total ratings and number of reviews
     data['numTotalRatings'] = None
     data['numReviews'] = None  
