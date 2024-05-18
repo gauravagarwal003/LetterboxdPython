@@ -2,6 +2,7 @@ import requests
 import pandas as pd
 from bs4 import BeautifulSoup, SoupStrainer
 import ast
+import json
 
 df = pd.read_csv('movies.csv')
 requestsSession = requests.Session()
@@ -243,11 +244,12 @@ def getnumViews(current, movieID, soup = None):
     return None
  
 # gets the average rating for a film
-def getAverageRating(filmID):
+def getAverageRating(current, filmID):
     # input: 'barbie'
     # output: 3.87 (can return None)
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'avgRating'].values[0]
+    if not current:
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'avgRating'].values[0]
     response = requestsSession.get(f"https://letterboxd.com/csi/film/{filmID}/rating-histogram/")
     if response.status_code != 200:
         return None
@@ -259,5 +261,50 @@ def getAverageRating(filmID):
     except Exception as e:
         return None
  
+def getNumReviews(current, movieID, jsonData = None):
+    if not current:
+        if movieID in df['movieID'].values:
+            return df.loc[df['movieID'] == movieID, 'numTotalRatings'].values[0]
+        
+    if not jsonData:
+        response = requestsSession.get(f"https://letterboxd.com/film/{movieID}/details")
+        soup = BeautifulSoup(response.text, 'lxml')
+        scriptTag = soup.find('script', type='application/ld+json')
+        if scriptTag:
+            json_content = scriptTag.string
+            start_index = json_content.find('/* <![CDATA[ */') + len('/* <![CDATA[ */')
+            end_index = json_content.find('/* ]]> */')
+            json_data = json_content[start_index:end_index].strip()
+            jsonData = json.loads(json_data)
+        else:
+            return None
+            
+    if "reviewCount" in jsonData['aggregateRating']:
+        return jsonData['aggregateRating']['reviewCount']  
+    
+def getNumRatings(current, movieID, jsonData = None):
+    if not current:
+        if movieID in df['movieID'].values:
+            return df.loc[df['movieID'] == movieID, 'numTotalRatings'].values[0]
+        
+    if not jsonData:
+        response = requestsSession.get(f"https://letterboxd.com/film/{movieID}/details")
+        soup = BeautifulSoup(response.text, 'lxml')
+        scriptTag = soup.find('script', type='application/ld+json')
+        if scriptTag:
+            json_content = scriptTag.string
+            start_index = json_content.find('/* <![CDATA[ */') + len('/* <![CDATA[ */')
+            end_index = json_content.find('/* ]]> */')
+            json_data = json_content[start_index:end_index].strip()
+            jsonData = json.loads(json_data)
+        else:
+            return None
+            
+    if "aggregateRating" in jsonData:
+        if "ratingCount" in jsonData['aggregateRating']:
+            return jsonData['aggregateRating']['ratingCount']
+
+
+
     
 print(getAverageRating('lips-2005'))
