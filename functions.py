@@ -4,8 +4,38 @@ from bs4 import BeautifulSoup, SoupStrainer
 import ast
 import json
 
-df = pd.read_csv('movies.csv')
+FILE_NAME = 'movies.csv'
+try:
+    df = pd.read_csv(FILE_NAME)
+except pd.errors.EmptyDataError:
+    with open(FILE_NAME, 'w') as file:
+        file.write("movieID,title,avgRating,year,numTotalRatings,numReviews,num0_5StarRatings,num1StarRatings,num1_5StarRatings,num2StarRatings,num2_5StarRatings,num3StarRatings,num3_5StarRatings,num4StarRatings,num4_5StarRatings,num5StarRatings,director,numViews,numLikes,numFans,genres,themes,nanoGenres,runtime,primaryLanguage,spokenLanguages,countries,numListAppearances,cast,producers,writers,cinematography,editors,studios,posterLink,imdbLink,backdropLink, dateCreated" + '\n')
+    df = pd.read_csv(FILE_NAME)
 requestsSession = requests.Session()
+starsToInt = { # Maps stars ('★★★½') to a string ('3_5')
+    "half-★": '0_5',
+    "★": '1',
+    "★½": '1_5',
+    "★★": '2',
+    "★★½": '2_5',
+    "★★★": '3',
+    "★★★½": '3_5',
+    "★★★★": '4',
+    "★★★★½": '4_5',
+    "★★★★★": '5',
+}
+getIndex = { # Maps a string ('3_5') to an index (7)    
+    "0_5": 0,
+    "1": 1,
+    "1_5": 2,
+    "2": 3,
+    "2_5": 4,
+    "3": 5,
+    "3_5": 6,
+    "4": 7,
+    "4_5": 8,
+    "5": 9,
+}
 
 
 # MISCELLANEOUS FUNCTIONS
@@ -45,7 +75,6 @@ def getDisplayName(iD):
         return any(target_string.lower() in theme.lower() for theme in themes_list)
 
     def getDisplayNameThemeNanoGenre(name, columnLabel, iD):
-        df = pd.read_csv('movies.csv')
         df[columnLabel] = df[columnLabel].apply(ast.literal_eval)
         movieID = None
         for index, row in df.iterrows():
@@ -180,7 +209,6 @@ def isMovie(iD, soup = None):
 # GET DETAILS THAT DON"T CHANGE
 #------------------------------------------------------------
 
-
 # gets the title of a movie
 # soup can be any tab from the movie page except nanogenres, themes, and similar 
 def getTitle(filmID, soup = None):
@@ -221,7 +249,353 @@ def getReleaseYear(filmID, soup = None):
     except Exception as e:
         return None
     
+
+def getDirectors(filmID, jsonData = None):
+    if filmID in df['movieID'].values:
+        return df.loc[df['movieID'] == filmID, 'director'].values[0]
+    if not jsonData:
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
+        soup = BeautifulSoup(response.text, 'lxml')
+        scriptTag = soup.find('script', type='application/ld+json')
+        if scriptTag:
+            json_content = scriptTag.string
+            start_index = json_content.find('/* <![CDATA[ */') + len('/* <![CDATA[ */')
+            end_index = json_content.find('/* ]]> */')
+            json_data = json_content[start_index:end_index].strip()
+            jsonData = json.loads(json_data)
+        else:
+            return None
+    result = []
+    if "director" in jsonData:
+        for director in jsonData['director']:
+            result.append(director['sameAs'])
+    return result
     
+
+def getGenres(filmID, jsonData = None):
+    if filmID in df['movieID'].values:
+        return df.loc[df['movieID'] == filmID, 'genres'].values[0]
+
+    if not jsonData:
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
+        soup = BeautifulSoup(response.text, 'lxml')
+        scriptTag = soup.find('script', type='application/ld+json')
+        if scriptTag:
+            json_content = scriptTag.string
+            start_index = json_content.find('/* <![CDATA[ */') + len('/* <![CDATA[ */')
+            end_index = json_content.find('/* ]]> */')
+            json_data = json_content[start_index:end_index].strip()
+            jsonData = json.loads(json_data)
+        else:
+            return None
+    result = []
+    if "genre" in jsonData:
+        for genre in jsonData['genre']:
+            result.append(genre)
+    return result
+    
+    
+def getThemes(filmID, soup = None):
+    if filmID in df['movieID'].values:
+        return df.loc[df['movieID'] == filmID, 'themes'].values[0]
+    
+    if not soup:
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/themes")
+        soup = BeautifulSoup(response.text, 'lxml')
+        
+    result = []
+    aTags = soup.find_all("a", href=lambda href: href and href.startswith("/films/theme/"))
+    for aTag in aTags:
+        rawTheme = aTag.get("href")
+        theme = rawTheme[6:-14]
+        result.append(theme)
+    return result
+
+
+def getNanoGenres(filmID, soup = None):
+    if filmID in df['movieID'].values:
+        return df.loc[df['movieID'] == filmID, 'nanoGenres'].values[0]
+    
+    if not soup:
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/nanogenres")
+        soup = BeautifulSoup(response.text, 'lxml')
+    result = []
+    aTags = soup.find_all("a", href=lambda href: href and href.startswith("/films/nanogenre/"))
+    if aTags:
+        for aTag in aTags:
+            rawNanoGenre = aTag.get("href")
+            nanoGenre = rawNanoGenre[6:-14]
+            result.append(nanoGenre)
+    return result
+    
+    
+def getRuntime(filmID, soup = None):
+    if filmID in df['movieID'].values:
+        return df.loc[df['movieID'] == filmID, 'runtime'].values[0]
+    
+    if not soup:
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
+        soup = BeautifulSoup(response.text, 'lxml')
+    
+    result = None
+    pTag = soup.find('p', class_='text-link text-footer')
+    if pTag:
+        try:
+            runtimeRaw = pTag.get_text()
+            result = int(runtimeRaw.split()[0])
+        except:
+            return None
+    return None
+
+
+def getPrimaryLanguage(filmID, soup = None):
+    if filmID in df['movieID'].values:
+        return df.loc[df['movieID'] == filmID, 'primaryLanguage'].values[0]
+    
+    if not soup:
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
+        soup = BeautifulSoup(response.text, 'lxml')
+    
+    aTags = soup.find_all("a", href=lambda href: href and href.startswith("/films/language/"))
+    if aTags:
+        return aTags[0].get("href")[6:]
+    
+    return None
+
+
+def getSpokenLanguages(filmID, soup = None):
+    if filmID in df['movieID'].values:
+        return df.loc[df['movieID'] == filmID, 'spokenLanguages'].values[0]
+    
+    if not soup:
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
+        soup = BeautifulSoup(response.text, 'lxml')
+    
+    result = []
+    aTags = soup.find_all("a", href=lambda href: href and href.startswith("/films/language/"))
+    if aTags:
+        for aTag in aTags[1:]:
+            language = aTag.get("href")[6:]
+            result.append(language)
+    
+    return result
+
+    
+def getCountries(filmID, soup = None):
+    if filmID in df['movieID'].values:
+        return df.loc[df['movieID'] == filmID, 'countries'].values[0]
+    
+    if not soup:
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
+        soup = BeautifulSoup(response.text, 'lxml')
+    
+    result = []
+    aTags = soup.find_all("a", href=lambda href: href and href.startswith("/films/country/"))
+    if aTags:
+        for aTag in aTags:
+            country = aTag.get("href")[6:]
+            result.append(country)
+    
+    return result
+
+
+def getCast(filmID, soup = None):
+    if filmID in df['movieID'].values:
+        return df.loc[df['movieID'] == filmID, 'cast'].values[0]
+    
+    if not soup:
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}")
+        soup = BeautifulSoup(response.text, 'lxml')
+    
+    notAllowed = ['(uncredited)', '(archive footage)', '(voice / uncredited)', '(voice/uncredited)', '(unconfirmed)', '(uncredited voice)', '(voice, uncredited)']
+    result = []
+    castList = soup.find('div', class_ = 'cast-list')
+    if castList:
+        actors = castList.find_all('a', class_ = 'text-slug tooltip')
+        for actor in actors:
+            if actor.get('title'):
+                add = True
+                for rule in notAllowed:
+                    if rule in actor.get('title'):
+                        add = False
+                if add:
+                    result.append(actor.get('href'))
+    return result
+
+
+def getProducers(filmID, soup = None):
+    if filmID in df['movieID'].values:
+        return df.loc[df['movieID'] == filmID, 'producers'].values[0]
+    
+    if not soup:
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/crew")
+        soup = BeautifulSoup(response.text, 'lxml')
+    
+    result = []
+    aTags = soup.find_all("a", href=lambda href: href and href.startswith("/producer/"))
+    if aTags:
+        for aTag in aTags:
+            producer = aTag.get("href")
+            result.append(producer)
+    
+    return result
+
+
+def getWriters(filmID, soup = None):
+    if filmID in df['movieID'].values:
+        return df.loc[df['movieID'] == filmID, 'writers'].values[0]
+    
+    if not soup:
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/crew")
+        soup = BeautifulSoup(response.text, 'lxml')
+    
+    result = []
+    aTags = soup.find_all("a", href=lambda href: href and href.startswith("/writer/"))
+    if aTags:
+        for aTag in aTags:
+            writer = aTag.get("href")
+            result.append(writer)
+    
+    return result
+
+
+def getCinematography(filmID, soup = None):
+    if filmID in df['movieID'].values:
+        return df.loc[df['movieID'] == filmID, 'cinematography'].values[0]
+    
+    if not soup:
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/crew")
+        soup = BeautifulSoup(response.text, 'lxml')
+    
+    result = []
+    aTags = soup.find_all("a", href=lambda href: href and href.startswith("/cinematography/"))
+    if aTags:
+        for aTag in aTags:
+            cin = aTag.get("href")
+            result.append(cin)
+    
+    return result
+
+
+def getEditors(filmID, soup = None):
+    if filmID in df['movieID'].values:
+        return df.loc[df['movieID'] == filmID, 'editors'].values[0]
+    
+    if not soup:
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/crew")
+        soup = BeautifulSoup(response.text, 'lxml')
+    
+    result = []
+    aTags = soup.find_all("a", href=lambda href: href and href.startswith("/editor/"))
+    if aTags:
+        for aTag in aTags:
+            editor = aTag.get("href")
+            result.append(editor)
+    
+    return result
+
+
+def getStudios(filmID, jsonData = None):
+    if filmID in df['movieID'].values:
+        return df.loc[df['movieID'] == filmID, 'studios'].values[0]
+    
+    if not jsonData:
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
+        soup = BeautifulSoup(response.text, 'lxml')
+        scriptTag = soup.find('script', type='application/ld+json')
+        if scriptTag:
+            json_content = scriptTag.string
+            start_index = json_content.find('/* <![CDATA[ */') + len('/* <![CDATA[ */')
+            end_index = json_content.find('/* ]]> */')
+            json_data = json_content[start_index:end_index].strip()
+            jsonData = json.loads(json_data)
+        else:
+            return None
+    result = []
+    if "productionCompany" in jsonData:
+        for studio in jsonData['productionCompany']:
+            result.append(studio['sameAs'])
+    return result
+
+    
+def getPosterLink(filmID, jsonData = None):
+    if filmID in df['movieID'].values:
+        return df.loc[df['movieID'] == filmID, 'posterLink'].values[0]
+    
+    if not jsonData:
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
+        soup = BeautifulSoup(response.text, 'lxml')
+        scriptTag = soup.find('script', type='application/ld+json')
+        if scriptTag:
+            json_content = scriptTag.string
+            start_index = json_content.find('/* <![CDATA[ */') + len('/* <![CDATA[ */')
+            end_index = json_content.find('/* ]]> */')
+            json_data = json_content[start_index:end_index].strip()
+            jsonData = json.loads(json_data)
+        else:
+            return None
+        
+    result = ""
+    if "image" in jsonData:
+        result = jsonData['image']  
+    return result
+
+
+def getIMDBLink(filmID, soup = None):
+    if filmID in df['movieID'].values:
+        return df.loc[df['movieID'] == filmID, 'imdbLink'].values[0]
+    
+    if not soup:
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}")
+        soup = BeautifulSoup(response.text, 'lxml')
+    
+    result = ""
+    IMDbTag = soup.find('a', {'data-track-action': 'IMDb'})
+    if IMDbTag:
+        result = IMDbTag['href']   
+    return result 
+    
+
+def getBackdropLink(filmID, soup = None):
+    if filmID in df['movieID'].values:
+        return df.loc[df['movieID'] == filmID, 'backdropLink'].values[0]
+    
+    if not soup:
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}")
+        soup = BeautifulSoup(response.text, 'lxml')
+    
+    result = ""
+    metaTag = soup.find('meta', attrs={'name': 'twitter:image'})
+    if metaTag:
+        backdropURL = metaTag.get('content')
+        if backdropURL != getIMDBLink(filmID, soup): # makes sure backdrop is not the same as poster
+            result = backdropURL
+    return result
+
+
+def getDateCreated(filmID, jsonData = None):
+    if filmID in df['movieID'].values:
+        return df.loc[df['movieID'] == filmID, 'dateCreated'].values[0]
+    
+    if not jsonData:
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
+        soup = BeautifulSoup(response.text, 'lxml')
+        scriptTag = soup.find('script', type='application/ld+json')
+        if scriptTag:
+            json_content = scriptTag.string
+            start_index = json_content.find('/* <![CDATA[ */') + len('/* <![CDATA[ */')
+            end_index = json_content.find('/* ]]> */')
+            json_data = json_content[start_index:end_index].strip()
+            jsonData = json.loads(json_data)
+        else:
+            return None
+        
+    result = ""
+    if "dateCreated" in jsonData:
+        result = jsonData["dateCreated"]    
+    return result
+
+
 # GET DETAILS THAT CHANGE
 # current is False if you want to get info from database and True if you want the current info
 #------------------------------------------------------------
@@ -236,12 +610,12 @@ def getnumViews(current, movieID, soup = None):
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{movieID}/likes")
         soup = BeautifulSoup(response.text, 'lxml')
-        
+    
+    
     aTag = soup.find("a", href=f"/film/{movieID}/members/")
-    print(aTag)
     if aTag and aTag.has_attr("title"):
         return int(''.join(filter(str.isdigit, aTag["title"])))    
-    return None
+    return 0
  
 # gets the average rating for a film
 def getAverageRating(current, filmID):
@@ -261,6 +635,7 @@ def getAverageRating(current, filmID):
     except Exception as e:
         return None
  
+ 
 def getNumReviews(current, movieID, jsonData = None):
     if not current:
         if movieID in df['movieID'].values:
@@ -277,10 +652,13 @@ def getNumReviews(current, movieID, jsonData = None):
             json_data = json_content[start_index:end_index].strip()
             jsonData = json.loads(json_data)
         else:
-            return None
-            
-    if "reviewCount" in jsonData['aggregateRating']:
-        return jsonData['aggregateRating']['reviewCount']  
+            return 0
+    
+    if "aggregateRating" in jsonData:
+        if "reviewCount" in jsonData['aggregateRating']:
+            return jsonData['aggregateRating']['reviewCount'] 
+    return 0
+   
     
 def getNumRatings(current, movieID, jsonData = None):
     if not current:
@@ -298,13 +676,74 @@ def getNumRatings(current, movieID, jsonData = None):
             json_data = json_content[start_index:end_index].strip()
             jsonData = json.loads(json_data)
         else:
-            return None
+            return 0
             
     if "aggregateRating" in jsonData:
         if "ratingCount" in jsonData['aggregateRating']:
             return jsonData['aggregateRating']['ratingCount']
+    return 0
 
 
-
+def getNumLikes(current, movieID, soup = None):
+    if not current:
+        if movieID in df['movieID'].values:
+            return df.loc[df['movieID'] == movieID, 'numLikes'].values[0]        
+        
+    if not soup:
+        response = requestsSession.get(f"https://letterboxd.com/film/{movieID}/likes")
+        soup = BeautifulSoup(response.text, 'lxml')
     
-print(getAverageRating('lips-2005'))
+    result = 0
+    aTag = soup.find("a", href=f"/film/{movieID}/members/")
+    if aTag and aTag.has_attr("title"):
+        result = int(''.join(filter(str.isdigit, aTag["title"])))
+    return result
+
+
+def getNumFans(current, movieID, soup = None):
+    if not current:
+        if movieID in df['movieID'].values:
+            return df.loc[df['movieID'] == movieID, 'numFans'].values[0]        
+        
+    if not soup:
+        response = requestsSession.get(f"https://letterboxd.com/film/{movieID}/likes")
+        soup = BeautifulSoup(response.text, 'lxml')
+    
+    result = 0
+    aTag = soup.find("a", href=f"/film/{movieID}/fans/")
+    if aTag and aTag.has_attr("title"):
+        result = int(''.join(filter(str.isdigit, aTag["title"])))
+    return result
+
+
+def getNumListAppearances(current, movieID, soup = None):
+    if not current:
+        if movieID in df['movieID'].values:
+            return df.loc[df['movieID'] == movieID, 'numListAppearances'].values[0]        
+        
+    if not soup:
+        response = requestsSession.get(f"https://letterboxd.com/film/{movieID}/likes")
+        soup = BeautifulSoup(response.text, 'lxml')
+    
+    result = 0
+    aTag = soup.find("a", href=f"/film/{movieID}/lists/")
+    if aTag and aTag.has_attr("title"):
+        result = int(''.join(filter(str.isdigit, aTag["title"])))
+    return result
+    
+
+def getHistogram(current, movieID):
+    if not current:
+        if movieID in df['movieID'].values:
+            return [df.loc[df['movieID'] == movieID, 'num0_5StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num1StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num1_5StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num2StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num2_5StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num3StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num3_5StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num4StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num4_5StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num5StarRatings'].values[0]]
+    
+    responseHistogram = requestsSession.get(f"https://letterboxd.com/csi/film/{movieID}/rating-histogram/")
+    histogram = BeautifulSoup(responseHistogram.text, "lxml", parse_only=  SoupStrainer("li", class_="rating-histogram-bar"))
+    
+    result = [0] * 10
+    tooltip_elements = histogram.find_all('a', class_ = 'ir tooltip')
+    for element in tooltip_elements: 
+        num = int(''.join(c for c in element.text.split()[0] if c.isdigit()))
+        index = getIndex[starsToInt[element.text.split()[1]]]
+        result[index] = num
+    return result
