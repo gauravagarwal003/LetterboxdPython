@@ -77,7 +77,7 @@ def addMovieToDatabase(movieID):
     data['title'] = getnumViews(True, movieID, soupLikes)
     
     # add average rating
-    data['avgRating'] = getAverageRating(movieID)
+    data['avgRating'] = getAverageRating(True, movieID)
     
     # add year
     data['year'] = getReleaseYear(movieID, soup)
@@ -90,16 +90,12 @@ def addMovieToDatabase(movieID):
         json_data = json_content[start_index:end_index].strip()
         jsonData = json.loads(json_data)
             
-     # add total ratings and number of reviews
+    # add total ratings and number of reviews
     data['numTotalRatings'] = None
     data['numReviews'] = None  
     if scriptTag:
-        if "aggregateRating" in jsonData:
-            if "ratingCount" in jsonData['aggregateRating']:
-                data['numTotalRatings'] = jsonData['aggregateRating']['ratingCount']
-
-            if "reviewCount" in jsonData['aggregateRating']:
-                data['numReviews'] = jsonData['aggregateRating']['reviewCount']            
+        data['numReviews'] = getNumReviews(True, movieID, jsonData)
+        data['numTotalRatings'] = getNumRatings(True, movieID, jsonData)
 
     tooltip_elements = histogram.find_all('a', class_ = 'ir tooltip')
     # add histogram data 
@@ -114,173 +110,78 @@ def addMovieToDatabase(movieID):
             data[f"num{i}StarRatings"] = 0
     
     # add director(s)
-    data['director'] = []    
+    data['director'] = []
     if scriptTag:
-        if "director" in jsonData:
-            for director in jsonData['director']:
-                data['director'].append(director['sameAs'])
+        data['director'] = getDirectors(movieID, jsonData)
     
     # add views
-    data['numViews'] = 0
-    aTag = soupLikes.find("a", href=f"/film/{movieID}/members/")
-    if aTag and aTag.has_attr("title"):
-        data['numViews'] = int(''.join(filter(str.isdigit, aTag["title"])))
+    data['numViews'] = getnumViews(True, movieID, soupLikes)
     
     # add likes
-    data['numLikes'] = 0
-    aTag = soupLikes.find("a", href=f"/film/{movieID}/members/")
-    if aTag and aTag.has_attr("title"):
-        data['numLikes'] = int(''.join(filter(str.isdigit, aTag["title"])))
+    data['numLikes'] = getNumLikes(True, movieID, soupLikes)
         
     # add fans
-    data['numFans'] = 0
-    aTag = soupLikes.find("a", href=f"/film/{movieID}/fans/")
-    if aTag and aTag.has_attr("title"):
-        data['numFans'] = int(''.join(filter(str.isdigit, aTag["title"])))
+    data['numFans'] = getNumFans(True,  movieID, soupLikes)
     
     #add genre(s)
     data['genres'] = []
     if scriptTag:
-        if "genre" in jsonData:
-            for genre in jsonData['genre']:
-                data['genres'].append(genre)
+        data['genres'] = getGenres(movieID, jsonData)
                 
     # add themes
-    data['themes'] = []
-    aTags = soupThemes.find_all("a", href=lambda href: href and href.startswith("/films/theme/"))
-    if aTags:
-        for aTag in aTags:
-            rawTheme = aTag.get("href")
-            theme = rawTheme[6:-14]
-            data['themes'].append(theme)
+    data['themes'] = getThemes(movieID, soupThemes)
                     
     # add nanogenres
-    data['nanoGenres'] = []
-    aTags = soupNanoGenres.find_all("a", href=lambda href: href and href.startswith("/films/nanogenre/"))
-    if aTags:
-        for aTag in aTags:
-            rawNanoGenre = aTag.get("href")
-            nanoGenre = rawNanoGenre[6:-14]
-            data['nanoGenres'].append(nanoGenre)
+    data['nanoGenres'] = getNanoGenres(movieID, soupNanoGenres)
     
     # add runtime
-    data['runtime'] = 0
-    pTag = soup.find('p', class_='text-link text-footer')
-
-    if pTag:
-        try:
-            runtimeRaw = pTag.get_text()
-            data['runtime'] = int(runtimeRaw.split()[0])
-        except:
-            return False
-    else:
-        return False
+    data['runtime'] = getRuntime(movieID, soup)
         
     # add primary and secondary languages
-    data['primaryLanguage'] = ""
-    data['spokenLanguages'] = []
-    aTags = soup.find_all("a", href=lambda href: href and href.startswith("/films/language/"))
-    if aTags:
-        data['primaryLanguage'] = aTags[0].get("href")[6:]
-        for aTag in aTags[1:]:
-            language = aTag.get("href")[6:]
-            data['spokenLanguages'].append(language)
+    data['primaryLanguage'] = getPrimaryLanguage(movieID, soup)
+    data['spokenLanguages'] = getSpokenLanguages(movieID, soup)
     
     # add countries
-    data["countries"] = []
-    aTags = soup.find_all("a", href=lambda href: href and href.startswith("/films/country/"))
-    if aTags:
-        for aTag in aTags:
-            country = aTag['href'][6:]
-            data["countries"].append(country)
+    data["countries"] = getCountries(movieID, soup)
     
     # add listAppearances
-    data['numListAppearances'] = 0
-    aTag = soupLikes.find("a", href=f"/film/{movieID}/lists/")
-    if aTag and aTag.has_attr("title"):
-        data['numListAppearances'] = int(''.join(filter(str.isdigit, aTag["title"])))
+    data['numListAppearances'] = getNumListAppearances(True, movieID, soupLikes)
     
     # add cast
-    notAllowed = ['(uncredited)', '(archive footage)', '(voice / uncredited)', '(voice/uncredited)', '(unconfirmed)', '(uncredited voice)', '(voice, uncredited)']
-    responseCast = requestsSession.get(f"https://letterboxd.com/film/{movieID}/")
-    soup = BeautifulSoup(responseCast.text, 'lxml')
-    data['cast'] = []
-    castList = soup.find('div', class_ = 'cast-list')
-    if castList:
-        actors = castList.find_all('a', class_ = 'text-slug tooltip')
-        for actor in actors:
-            if actor.get('title'):
-                add = True
-                for rule in notAllowed:
-                    if rule in actor.get('title'):
-                        add = False
-                if add:
-                    data['cast'].append(actor.get('href'))
+    data['cast'] = getCast(movieID)
     
     # add producers
-    data['producers'] = []
-    aTags = soupCrew.find_all("a", href=lambda href: href and href.startswith("/producer/"))
-    if aTags:
-        for aTag in aTags:
-            producer = aTag.get("href")
-            data['producers'].append(producer)
+    data['producers'] = getProducers(movieID, soupCrew)
 
     # add writers
-    data['writers'] = []
-    aTags = soupCrew.find_all("a", href=lambda href: href and href.startswith("/writer/"))
-    if aTags:
-        for aTag in aTags:
-            writer = aTag.get("href")
-            data['writers'].append(writer)
+    data['writers'] = getWriters(movieID, soupCrew)
             
     # add cinematography
-    data['cinematography'] = []
-    aTags = soupCrew.find_all("a", href=lambda href: href and href.startswith("/cinematography/"))
-    if aTags:
-        for aTag in aTags:
-            cin = aTag.get("href")
-            data['cinematography'].append(cin)
+    data['cinematography'] = getCinematography(movieID, soupCrew)
     
     # add editors
-    data['editors'] = []
-    aTags = soupCrew.find_all("a", href=lambda href: href and href.startswith("/editor/"))
-    if aTags:
-        for aTag in aTags:
-            editor = aTag.get("href")
-            data['editors'].append(editor)  
+    data['editors'] = getEditors(movieID, soupCrew)
               
     # add studio(s)
     data['studios'] = []  
     if scriptTag:
-        if "productionCompany" in jsonData:
-            for studio in jsonData['productionCompany']:
-                data['studios'].append(studio['sameAs'])
+        data['studios'] = getStudios(movieID, jsonData)
  
     # add link to image of poster
     data['posterLink'] = ""  
     if scriptTag:
-        if "image" in jsonData:
-            data['posterLink'] = jsonData['image']  
+        data['posterLink'] = getPosterLink(movieID, jsonData)
     
     # add imdbLink
-    data['imdbLink'] = ""
-    IMDbTag = soup.find('a', {'data-track-action': 'IMDb'})
-    if IMDbTag:
-        data['imdbLink'] = IMDbTag['href']          
+    data['imdbLink'] = getIMDBLink(movieID, soup)
     
     # add backdropLink
-    data['backdropLink'] = ""
-    metaTag = soup.find('meta', attrs={'name': 'twitter:image'})
-    if metaTag:
-        backdropURL = metaTag.get('content')
-        if backdropURL != data['posterLink']: # makes sure backdrop is not the same as poster
-            data['backdropLink'] = backdropURL
-
+    data['backdropLink'] = getBackdropLink(movieID, soup)
+    
     # add date Created
     data["dateCreated"] = ""
     if scriptTag:
-        if "dateCreated" in jsonData:
-            data["dateCreated"] = jsonData["dateCreated"]    
+        data["dateCreated"] = getDateCreated(movieID, jsonData)
 
     # commit changes
     df = pd.DataFrame([data])
