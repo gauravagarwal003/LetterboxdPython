@@ -6,6 +6,10 @@ from bs4 import BeautifulSoup, SoupStrainer
 import time
 from functions import *
 
+CSV_FILE_NAME = "movies.csv"
+ERROR_FILE_NAME = "error.txt"
+STATS_FILE_NAME = "stats.txt"
+LAST_PAGE_FILE_NAME = "last_page.txt"
 minViews = 25000
 pagesPerFilm = 72
 requestsSession = requests.Session()
@@ -185,12 +189,12 @@ def addMovieToDatabase(movieID):
 
     # commit changes
     df = pd.DataFrame([data])
-    df.to_csv('movies.csv', mode='a', header=not os.path.exists('movies.csv'), index=False)
+    df.to_csv(CSV_FILE_NAME, mode='a', header=not os.path.exists(CSV_FILE_NAME), index=False)
     return True
 
 base_url = f"https://letterboxd.com/sprudelheinz/list/all-the-movies-sorted-by-movie-posters-1/"
 try:
-    with open("last_page.txt", "r") as file:
+    with open(LAST_PAGE_FILE_NAME, "r") as file:
         page_number = int(file.read().strip())
 except Exception as e:
     page_number = 1
@@ -209,15 +213,15 @@ while True:
         try:
             addMovieToDatabase(div['data-film-slug'])
         except Exception as e:
-            with open("error.txt", "a") as file:
-                file.write(f"An error occurred while trying to add movie {div['data-film-slug']}: {e}")
-        with open("stats.txt", "a") as file:
+            with open(ERROR_FILE_NAME, "a") as file:
+                file.write(f"An error occurred while trying to add movie {div['data-film-slug']}: {e}" + "\n")
+        with open(STATS_FILE_NAME, "a") as file:
             file.write(f"{div['data-film-slug']} took {time.time() - startMovie} seconds\n")
-    with open("stats.txt", "a") as file:
+    with open(STATS_FILE_NAME, "a") as file:
         file.write(f"\n")
         file.write(f"Page {page_number} took {time.time() - startPage} seconds\n")
         file.write(f"\n")
     print(f"Page {page_number} took {time.time() - startPage} seconds")
     page_number += 1  
-    with open("last_page.txt", "w") as file:
+    with open(LAST_PAGE_FILE_NAME, "w") as file:
         file.write(str(page_number))
