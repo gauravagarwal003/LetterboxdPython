@@ -1,13 +1,13 @@
 import pandas as pd
-import getDisplayName
+from functions import getLink, getDisplayName
 
 df = pd.read_csv('movies.csv')
 df_copy = df.copy()
 
-filterCol = 'cast'
+filterCol = 'studios'
 avgCol = 'avgRating'
 topBottomNum = 5
-minMovies = 15
+minMovies = 20
 
 if df.at[0, filterCol].startswith("[") and df.at[0, filterCol].endswith("]"):
     df_copy[filterCol] = df_copy[filterCol].apply(eval)  
@@ -33,9 +33,10 @@ else:
 print()
 print(f"{topBottomNum} highest rated movies by {filterCol} with at least {minMovies} movies:")
 for name, rating in zip(top.index, top.values):
-    print(f"{getDisplayName.getDisplayName(name)} with a {avgCol} of {round(rating,3)}")
+    print(f"{getDisplayName(name)} with a {avgCol} of {round(rating,3)}: {getLink(name)}")
 
 print()
 print(f"{topBottomNum} lowest rated movies by {filterCol} with at least {minMovies} movies:")
 for name, rating in zip(bottom.index, bottom.values):
-    print(f"{getDisplayName.getDisplayName(name)} with a {avgCol} of {round(rating,3)}")
+    print(f"{getDisplayName(name)} with a {avgCol} of {round(rating,3)}: {getLink(name)}")
+print()

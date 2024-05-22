@@ -1,5 +1,4 @@
 import heapq
-from tqdm import tqdm
 import argparse
 
 from main import getRatingsforUser, loadRatingsFomFile, calculateVariance
