@@ -10,7 +10,13 @@ CSV_FILE_NAME = "movies.csv"
 ERROR_FILE_NAME = "error.txt"
 STATS_FILE_NAME = "stats.txt"
 LAST_PAGE_FILE_NAME = "last_page.txt"
-minViews = 25000
+minViews = 20000
+
+try:
+    tryToOpen = pd.read_csv(CSV_FILE_NAME)        
+except (pd.errors.EmptyDataError, FileNotFoundError):
+    with open(CSV_FILE_NAME, 'w') as file:
+        file.write("movieID,title,avgRating,year,numTotalRatings,numReviews,num0_5StarRatings,num1StarRatings,num1_5StarRatings,num2StarRatings,num2_5StarRatings,num3StarRatings,num3_5StarRatings,num4StarRatings,num4_5StarRatings,num5StarRatings,director,numViews,numLikes,numFans,genres,themes,nanoGenres,runtime,primaryLanguage,spokenLanguages,countries,numListAppearances,cast,producers,writers,cinematography,editors,studios,posterLink,imdbLink,backdropLink, dateCreated" + '\n')
 pagesPerFilm = 72
 requestsSession = requests.Session()
 
@@ -44,7 +50,7 @@ def getMoviesWatchedForUser(username):
   return result
     
 def addMovieToDatabase(movieID):
-    if isMovieInDatabase(movieID):
+    if isMovieInDatabase(movieID, CSV_FILE_NAME):
         return False
     
     response = requestsSession.get(f"https://letterboxd.com/film/{movieID}/details")
@@ -54,20 +60,17 @@ def addMovieToDatabase(movieID):
     soupLikes = BeautifulSoup(responseLikes.text, 'lxml')
 
     # check if movie satisfies minimum views
-    if getnumViews(True, movieID, soupLikes) < minViews:
+    if getnumViews(True, movieID, soup = soupLikes) < minViews:
         return False
         
     # check if movie is a TV show or miniseries (according to TMDB link)
-    if not isMovie(movieID, soup):
+    if not isMovie(movieID, soup = soup):
         return False
     
-    responseHistogram = requestsSession.get(f"https://letterboxd.com/csi/film/{movieID}/rating-histogram/")
     responseThemes = requestsSession.get(f"https://letterboxd.com/film/{movieID}/themes")
     responseNanoGenres = requestsSession.get(f"https://letterboxd.com/film/{movieID}/nanogenres")
     responseCrew = requestsSession.get(f"https://letterboxd.com/film/{movieID}/crew")
 
-
-    histogram = BeautifulSoup(responseHistogram.text, "lxml", parse_only=  SoupStrainer("li", class_="rating-histogram-bar"))
     soupThemes = BeautifulSoup(responseThemes.text, 'lxml')
     soupNanoGenres = BeautifulSoup(responseNanoGenres.text, 'lxml')
     soupCrew = BeautifulSoup(responseCrew.text, 'lxml')
@@ -78,13 +81,13 @@ def addMovieToDatabase(movieID):
     data['movieID'] = movieID 
     
     # add title
-    data['title'] = getnumViews(True, movieID, soupLikes)
+    data['title'] = getTitle(movieID, soup = soup)
     
     # add average rating
     data['avgRating'] = getAverageRating(True, movieID)
     
     # add year
-    data['year'] = getReleaseYear(movieID, soup)
+    data['year'] = getReleaseYear(movieID, soup = soup)
 
     scriptTag = soup.find('script', type='application/ld+json')
     if scriptTag:
@@ -98,130 +101,127 @@ def addMovieToDatabase(movieID):
     data['numTotalRatings'] = None
     data['numReviews'] = None  
     if scriptTag:
-        data['numReviews'] = getNumReviews(True, movieID, jsonData)
-        data['numTotalRatings'] = getNumRatings(True, movieID, jsonData)
+        data['numReviews'] = getNumReviews(True, movieID, jsonData = jsonData)
+        data['numTotalRatings'] = getNumRatings(True, movieID, jsonData = jsonData)
 
-    tooltip_elements = histogram.find_all('a', class_ = 'ir tooltip')
-    # add histogram data 
-    for element in tooltip_elements: 
-        num = int(''.join(c for c in element.text.split()[0] if c.isdigit()))
-        stars = starsToInt[element.text.split()[1]]
-        data[f"num{stars}StarRatings"] = num
-
-    # set any missing histogram data to 0
-    for i in starsToInt.values(): 
-        if f"num{i}StarRatings" not in data:
-            data[f"num{i}StarRatings"] = 0
+    histogram = getHistogram(True, movieID)
+    index = 0
+    for rating in starsToInt.values(): 
+        data[f"num{rating}StarRatings"] = histogram[index]
+        index += 1
     
     # add director(s)
     data['director'] = []
     if scriptTag:
-        data['director'] = getDirectors(movieID, jsonData)
+        data['director'] = getDirectors(movieID, jsonData = jsonData)
     
     # add views
-    data['numViews'] = getnumViews(True, movieID, soupLikes)
+    data['numViews'] = getnumViews(True, movieID, soup = soupLikes)
     
     # add likes
-    data['numLikes'] = getNumLikes(True, movieID, soupLikes)
+    data['numLikes'] = getNumLikes(True, movieID, soup = soupLikes)
         
     # add fans
-    data['numFans'] = getNumFans(True,  movieID, soupLikes)
+    data['numFans'] = getNumFans(True,  movieID, soup = soupLikes)
     
     #add genre(s)
     data['genres'] = []
     if scriptTag:
-        data['genres'] = getGenres(movieID, jsonData)
+        data['genres'] = getGenres(movieID, jsonData = jsonData)
                 
     # add themes
-    data['themes'] = getThemes(movieID, soupThemes)
+    data['themes'] = getThemes(movieID, soup = soupThemes)
                     
     # add nanogenres
-    data['nanoGenres'] = getNanoGenres(movieID, soupNanoGenres)
+    data['nanoGenres'] = getNanoGenres(movieID, soup = soupNanoGenres)
     
     # add runtime
-    data['runtime'] = getRuntime(movieID, soup)
+    data['runtime'] = getRuntime(movieID, soup = soup)
         
     # add primary and secondary languages
-    data['primaryLanguage'] = getPrimaryLanguage(movieID, soup)
-    data['spokenLanguages'] = getSpokenLanguages(movieID, soup)
+    data['primaryLanguage'] = getPrimaryLanguage(movieID, soup = soup)
+    data['spokenLanguages'] = getSpokenLanguages(movieID, soup = soup)
     
     # add countries
-    data["countries"] = getCountries(movieID, soup)
+    data["countries"] = getCountries(movieID, soup = soup)
     
     # add listAppearances
-    data['numListAppearances'] = getNumListAppearances(True, movieID, soupLikes)
+    data['numListAppearances'] = getNumListAppearances(True, movieID, soup = soupLikes)
     
     # add cast
     data['cast'] = getCast(movieID)
     
     # add producers
-    data['producers'] = getProducers(movieID, soupCrew)
+    data['producers'] = getProducers(movieID, soup = soupCrew)
 
     # add writers
-    data['writers'] = getWriters(movieID, soupCrew)
+    data['writers'] = getWriters(movieID, soup = soupCrew)
             
     # add cinematography
-    data['cinematography'] = getCinematography(movieID, soupCrew)
+    data['cinematography'] = getCinematography(movieID, soup = soupCrew)
     
     # add editors
-    data['editors'] = getEditors(movieID, soupCrew)
+    data['editors'] = getEditors(movieID, soup = soupCrew)
               
     # add studio(s)
     data['studios'] = []  
     if scriptTag:
-        data['studios'] = getStudios(movieID, jsonData)
+        data['studios'] = getStudios(movieID, jsonData = jsonData)
  
     # add link to image of poster
     data['posterLink'] = ""  
     if scriptTag:
-        data['posterLink'] = getPosterLink(movieID, jsonData)
+        data['posterLink'] = getPosterLink(movieID, jsonData = jsonData)
     
     # add imdbLink
-    data['imdbLink'] = getIMDBLink(movieID, soup)
+    data['imdbLink'] = getIMDBLink(movieID, soup = soup)
     
     # add backdropLink
-    data['backdropLink'] = getBackdropLink(movieID, soup)
+    data['backdropLink'] = getBackdropLink(movieID, soup = soup)
     
     # add date Created
     data["dateCreated"] = ""
     if scriptTag:
-        data["dateCreated"] = getDateCreated(movieID, jsonData)
+        data["dateCreated"] = getDateCreated(movieID, jsonData = jsonData)
 
     # commit changes
     df = pd.DataFrame([data])
     df.to_csv(CSV_FILE_NAME, mode='a', header=not os.path.exists(CSV_FILE_NAME), index=False)
     return True
 
-base_url = f"https://letterboxd.com/sprudelheinz/list/all-the-movies-sorted-by-movie-posters-1/"
-try:
-    with open(LAST_PAGE_FILE_NAME, "r") as file:
-        page_number = int(file.read().strip())
-except Exception as e:
-    page_number = 1
-    pass
+def populateDatabase(base_url):
+    try:
+        with open(LAST_PAGE_FILE_NAME, "r") as file:
+            page_number = int(file.read().strip())
+    except Exception as e:
+        page_number = 1
+        pass
 
-while True:
-    startPage = time.time()
-    url = f"{base_url}/page/{page_number}/"
-    response = requestsSession.get(url)
-    soup = BeautifulSoup(response.text, 'lxml')
-    movie_divs = soup.find_all('div', class_='really-lazy-load')
-    if not movie_divs:
-        break
-    for div in movie_divs:
-        startMovie = time.time()
-        try:
-            addMovieToDatabase(div['data-film-slug'])
-        except Exception as e:
-            with open(ERROR_FILE_NAME, "a") as file:
-                file.write(f"An error occurred while trying to add movie {div['data-film-slug']}: {e}" + "\n")
+    while True:
+        startPage = time.time()
+        url = f"{base_url}/page/{page_number}/"
+        response = requestsSession.get(url)
+        soup = BeautifulSoup(response.text, 'lxml')
+        movie_divs = soup.find_all('div', class_='really-lazy-load')
+        if not movie_divs:
+            break
+        for div in movie_divs:
+            startMovie = time.time()
+            try:
+                addMovieToDatabase(div['data-film-slug'])
+            except Exception as e:
+                with open(ERROR_FILE_NAME, "a") as file:
+                    file.write(f"An error occurred while trying to add movie {div['data-film-slug']}: {e}" + "\n")
+            with open(STATS_FILE_NAME, "a") as file:
+                file.write(f"{div['data-film-slug']} took {time.time() - startMovie} seconds\n")
         with open(STATS_FILE_NAME, "a") as file:
-            file.write(f"{div['data-film-slug']} took {time.time() - startMovie} seconds\n")
-    with open(STATS_FILE_NAME, "a") as file:
-        file.write(f"\n")
-        file.write(f"Page {page_number} took {time.time() - startPage} seconds\n")
-        file.write(f"\n")
-    print(f"Page {page_number} took {time.time() - startPage} seconds")
-    page_number += 1  
-    with open(LAST_PAGE_FILE_NAME, "w") as file:
-        file.write(str(page_number))
+            file.write(f"\n")
+            file.write(f"Page {page_number} took {time.time() - startPage} seconds\n")
+            file.write(f"\n")
+        print(f"Page {page_number} took {time.time() - startPage} seconds")
+        page_number += 1  
+        with open(LAST_PAGE_FILE_NAME, "w") as file:
+            file.write(str(page_number))
+
+url = f"https://letterboxd.com/sprudelheinz/list/all-the-movies-sorted-by-movie-posters-1"
+populateDatabase(url)
