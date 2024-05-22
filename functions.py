@@ -4,14 +4,8 @@ from bs4 import BeautifulSoup, SoupStrainer
 import ast
 import json
 
-FILE_NAME = 'movies.csv'
-try:
-    df = pd.read_csv(FILE_NAME)
-except pd.errors.EmptyDataError:
-    with open(FILE_NAME, 'w') as file:
-        file.write("movieID,title,avgRating,year,numTotalRatings,numReviews,num0_5StarRatings,num1StarRatings,num1_5StarRatings,num2StarRatings,num2_5StarRatings,num3StarRatings,num3_5StarRatings,num4StarRatings,num4_5StarRatings,num5StarRatings,director,numViews,numLikes,numFans,genres,themes,nanoGenres,runtime,primaryLanguage,spokenLanguages,countries,numListAppearances,cast,producers,writers,cinematography,editors,studios,posterLink,imdbLink,backdropLink, dateCreated" + '\n')
-    df = pd.read_csv(FILE_NAME)
 requestsSession = requests.Session()
+
 starsToInt = { # Maps stars ('★★★½') to a string ('3_5')
     "half-★": '0_5',
     "★": '1',
@@ -54,7 +48,7 @@ def getLink(iD):
     if iD.lower() in genres:
         link = f"https://letterboxd.com/films/genre/{iD.replace(" ", "-")}"
     
-    elif iD.startswith("/theme/") or iD.startswith("/nanogenre/") or iD.startswith("/language/") or iD.startswith("/country/"):
+    elif iD.startswith("/theme/") or iD.startswith("/nanogenre/") or iD.startswith("/language/") or iD.startswith("/country/") or iD.startswith("/mini-theme/"):
         link = f"https://letterboxd.com/films{iD}"
         
     elif iD.startswith("/director/") or iD.startswith("/actor/") or iD.startswith("/producer/") or iD.startswith("/writer/") or iD.startswith("/cinematography/") or iD.startswith("/editor/") or iD.startswith("/studio/"):
@@ -68,19 +62,22 @@ def getLink(iD):
     return None    
         
 # returns the display name for a given genre, director, actor, country, languauge etc.
-def getDisplayName(iD):
+def getDisplayName(iD, FILE_NAME):
     # input: '/actor/ryan-gosling/' or '/language/hindi/'
     # output: 'Ryan Gosling' or 'Hindi' (can return None)
+    df = pd.read_csv(FILE_NAME)
     def has(themes_list, target_string):
         return any(target_string.lower() in theme.lower() for theme in themes_list)
 
-    def getDisplayNameThemeNanoGenre(name, columnLabel, iD):
+    def getDisplayNameThemeNanoGenre(name, columnLabel, iD, df):
         df[columnLabel] = df[columnLabel].apply(ast.literal_eval)
         movieID = None
         for index, row in df.iterrows():
             if has(row[columnLabel], iD):
                 movieID = row['movieID']
         if movieID:
+            if name == 'mini-theme':
+                name = 'theme'
             response = requestsSession.get(f"https://letterboxd.com/film/{movieID}/{name}s/")
             if response.status_code != 200:
                 return None
@@ -93,10 +90,13 @@ def getDisplayName(iD):
         return iD
     
     if iD.startswith("/theme/"):
-        return getDisplayNameThemeNanoGenre('theme', 'themes', iD)
+        return getDisplayNameThemeNanoGenre('theme', 'themes', iD, df)
+    
+    if iD.startswith("/mini-theme/"):
+        return getDisplayNameThemeNanoGenre('mini-theme', 'themes', iD, df)
     
     if iD.startswith("/nanogenre/"):
-        return getDisplayNameThemeNanoGenre('nanogenre', 'nanoGenres', iD)
+        return getDisplayNameThemeNanoGenre('nanogenre', 'nanoGenres', iD, df)
     
     if iD.startswith("/language/"):
         response = requestsSession.get(f"https://letterboxd.com/countries/")
@@ -151,8 +151,9 @@ def getDisplayName(iD):
     return ""
     
 # checks if a movie is in the database
-def isMovieInDatabase(movieID):
+def isMovieInDatabase(movieID, FILE_NAME):
     # returns True or False
+    df = pd.read_csv(FILE_NAME)
     try:
         if df.empty:
             return False
@@ -188,10 +189,12 @@ def isValidMovie(filmID):
 
 # checks if the given ID is a movie using the TMDB link 
 # soup can be any tab from the movie page except nanogenres, themes, and similar
-def isMovie(iD, soup = None):
+def isMovie(iD, soup = None, FILE_NAME = None):
     # returns True or False
-    if iD in df['movieID'].values:
-        return True
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if iD in df['movieID'].values:
+            return True
     if not isValidMovie(iD):
         return False
     if not soup:
@@ -211,11 +214,13 @@ def isMovie(iD, soup = None):
 
 # gets the title of a movie
 # soup can be any tab from the movie page except nanogenres, themes, and similar 
-def getTitle(filmID, soup = None):
+def getTitle(filmID, soup = None, FILE_NAME = None):
     # input: 'barbie'
     # output: 'Barbie' (can return None)
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'title'].values[0]
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'title'].values[0]
 
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}")
@@ -229,13 +234,13 @@ def getTitle(filmID, soup = None):
 
 # gets the release year of a movie
 # soup can be any tab from the movie page except nanogenres, themes, and similar 
-def getReleaseYear(filmID, soup = None):
+def getReleaseYear(filmID, soup = None, FILE_NAME = None):
     # input: 'barbie'
     # output: 2023 (can return None)
-    if not isValidMovie(filmID):
-        return None
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'year'].values[0]
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'year'].values[0]
     
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}")
@@ -250,9 +255,11 @@ def getReleaseYear(filmID, soup = None):
         return None
     
 
-def getDirectors(filmID, jsonData = None):
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'director'].values[0]
+def getDirectors(filmID, jsonData = None, FILE_NAME = None):
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'director'].values[0]
     if not jsonData:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
         soup = BeautifulSoup(response.text, 'lxml')
@@ -272,9 +279,11 @@ def getDirectors(filmID, jsonData = None):
     return result
     
 
-def getGenres(filmID, jsonData = None):
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'genres'].values[0]
+def getGenres(filmID, jsonData = None, FILE_NAME = None):
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'genres'].values[0]
 
     if not jsonData:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
@@ -295,16 +304,18 @@ def getGenres(filmID, jsonData = None):
     return result
     
     
-def getThemes(filmID, soup = None):
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'themes'].values[0]
+def getThemes(filmID, soup = None, FILE_NAME = None):
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'themes'].values[0]
     
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/themes")
         soup = BeautifulSoup(response.text, 'lxml')
         
     result = []
-    aTags = soup.find_all("a", href=lambda href: href and href.startswith("/films/theme/"))
+    aTags = soup.find_all("a", href=lambda href: href and href.startswith("/films/theme/") or href and href.startswith("/films/mini-theme/"))
     for aTag in aTags:
         rawTheme = aTag.get("href")
         theme = rawTheme[6:-14]
@@ -312,9 +323,11 @@ def getThemes(filmID, soup = None):
     return result
 
 
-def getNanoGenres(filmID, soup = None):
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'nanoGenres'].values[0]
+def getNanoGenres(filmID, soup = None, FILE_NAME = None):
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'nanoGenres'].values[0]
     
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/nanogenres")
@@ -329,9 +342,11 @@ def getNanoGenres(filmID, soup = None):
     return result
     
     
-def getRuntime(filmID, soup = None):
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'runtime'].values[0]
+def getRuntime(filmID, soup = None, FILE_NAME = None):
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'runtime'].values[0]
     
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
@@ -344,13 +359,15 @@ def getRuntime(filmID, soup = None):
             runtimeRaw = pTag.get_text()
             result = int(runtimeRaw.split()[0])
         except:
-            return None
-    return None
+            return result
+    return result
 
 
-def getPrimaryLanguage(filmID, soup = None):
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'primaryLanguage'].values[0]
+def getPrimaryLanguage(filmID, soup = None, FILE_NAME = None):
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'primaryLanguage'].values[0]
     
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
@@ -363,9 +380,11 @@ def getPrimaryLanguage(filmID, soup = None):
     return None
 
 
-def getSpokenLanguages(filmID, soup = None):
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'spokenLanguages'].values[0]
+def getSpokenLanguages(filmID, soup = None, FILE_NAME = None):
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'spokenLanguages'].values[0]
     
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
@@ -381,9 +400,11 @@ def getSpokenLanguages(filmID, soup = None):
     return result
 
     
-def getCountries(filmID, soup = None):
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'countries'].values[0]
+def getCountries(filmID, soup = None, FILE_NAME = None):
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'countries'].values[0]
     
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
@@ -399,9 +420,11 @@ def getCountries(filmID, soup = None):
     return result
 
 
-def getCast(filmID, soup = None):
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'cast'].values[0]
+def getCast(filmID, soup = None, FILE_NAME = None):
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'cast'].values[0]
     
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}")
@@ -423,9 +446,11 @@ def getCast(filmID, soup = None):
     return result
 
 
-def getProducers(filmID, soup = None):
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'producers'].values[0]
+def getProducers(filmID, soup = None, FILE_NAME = None):
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'producers'].values[0]
     
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/crew")
@@ -441,9 +466,11 @@ def getProducers(filmID, soup = None):
     return result
 
 
-def getWriters(filmID, soup = None):
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'writers'].values[0]
+def getWriters(filmID, soup = None, FILE_NAME = None):
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'writers'].values[0]
     
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/crew")
@@ -459,9 +486,11 @@ def getWriters(filmID, soup = None):
     return result
 
 
-def getCinematography(filmID, soup = None):
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'cinematography'].values[0]
+def getCinematography(filmID, soup = None, FILE_NAME = None):
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'cinematography'].values[0]
     
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/crew")
@@ -477,9 +506,11 @@ def getCinematography(filmID, soup = None):
     return result
 
 
-def getEditors(filmID, soup = None):
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'editors'].values[0]
+def getEditors(filmID, soup = None, FILE_NAME = None):
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'editors'].values[0]
     
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/crew")
@@ -495,9 +526,11 @@ def getEditors(filmID, soup = None):
     return result
 
 
-def getStudios(filmID, jsonData = None):
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'studios'].values[0]
+def getStudios(filmID, jsonData = None, FILE_NAME = None):
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'studios'].values[0]
     
     if not jsonData:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
@@ -518,9 +551,11 @@ def getStudios(filmID, jsonData = None):
     return result
 
     
-def getPosterLink(filmID, jsonData = None):
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'posterLink'].values[0]
+def getPosterLink(filmID, jsonData = None, FILE_NAME = None):
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'posterLink'].values[0]
     
     if not jsonData:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
@@ -541,9 +576,11 @@ def getPosterLink(filmID, jsonData = None):
     return result
 
 
-def getIMDBLink(filmID, soup = None):
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'imdbLink'].values[0]
+def getIMDBLink(filmID, soup = None, FILE_NAME = None):
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'imdbLink'].values[0]
     
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}")
@@ -556,9 +593,11 @@ def getIMDBLink(filmID, soup = None):
     return result 
     
 
-def getBackdropLink(filmID, soup = None):
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'backdropLink'].values[0]
+def getBackdropLink(filmID, soup = None, FILE_NAME = None):
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'backdropLink'].values[0]
     
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}")
@@ -573,9 +612,11 @@ def getBackdropLink(filmID, soup = None):
     return result
 
 
-def getDateCreated(filmID, jsonData = None):
-    if filmID in df['movieID'].values:
-        return df.loc[df['movieID'] == filmID, 'dateCreated'].values[0]
+def getDateCreated(filmID, jsonData = None, FILE_NAME = None):
+    if FILE_NAME:
+        df = pd.read_csv(FILE_NAME) 
+        if filmID in df['movieID'].values:
+            return df.loc[df['movieID'] == filmID, 'dateCreated'].values[0]
     
     if not jsonData:
         response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
@@ -602,10 +643,12 @@ def getDateCreated(filmID, jsonData = None):
 
 # checks if the movie has more views than the given number
 # soup is can be likes, reviews, or lists tab
-def getnumViews(current, movieID, soup = None):
+def getnumViews(current, movieID, soup = None, FILE_NAME = None):
     if not current:
-        if movieID in df['movieID'].values:
-            return df.loc[df['movieID'] == movieID, 'numViews'].values[0]        
+        if FILE_NAME:
+            df = pd.read_csv(FILE_NAME) 
+            if movieID in df['movieID'].values:
+                return df.loc[df['movieID'] == movieID, 'numViews'].values[0]        
         
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{movieID}/likes")
@@ -618,12 +661,15 @@ def getnumViews(current, movieID, soup = None):
     return 0
  
 # gets the average rating for a film
-def getAverageRating(current, filmID):
+def getAverageRating(current, filmID, FILE_NAME = None):
     # input: 'barbie'
     # output: 3.87 (can return None)
     if not current:
-        if filmID in df['movieID'].values:
-            return df.loc[df['movieID'] == filmID, 'avgRating'].values[0]
+        if FILE_NAME:
+            df = pd.read_csv(FILE_NAME) 
+            if filmID in df['movieID'].values:
+                return df.loc[df['movieID'] == filmID, 'avgRating'].values[0]
+            
     response = requestsSession.get(f"https://letterboxd.com/csi/film/{filmID}/rating-histogram/")
     if response.status_code != 200:
         return None
@@ -636,10 +682,12 @@ def getAverageRating(current, filmID):
         return None
  
  
-def getNumReviews(current, movieID, jsonData = None):
+def getNumReviews(current, movieID, jsonData = None, FILE_NAME = None):
     if not current:
-        if movieID in df['movieID'].values:
-            return df.loc[df['movieID'] == movieID, 'numTotalRatings'].values[0]
+        if FILE_NAME:
+            df = pd.read_csv(FILE_NAME) 
+            if movieID in df['movieID'].values:
+                return df.loc[df['movieID'] == movieID, 'numTotalRatings'].values[0]
         
     if not jsonData:
         response = requestsSession.get(f"https://letterboxd.com/film/{movieID}/details")
@@ -660,10 +708,12 @@ def getNumReviews(current, movieID, jsonData = None):
     return 0
    
     
-def getNumRatings(current, movieID, jsonData = None):
+def getNumRatings(current, movieID, jsonData = None, FILE_NAME = None):
     if not current:
-        if movieID in df['movieID'].values:
-            return df.loc[df['movieID'] == movieID, 'numTotalRatings'].values[0]
+        if FILE_NAME:
+            df = pd.read_csv(FILE_NAME) 
+            if movieID in df['movieID'].values:
+                return df.loc[df['movieID'] == movieID, 'numTotalRatings'].values[0]
         
     if not jsonData:
         response = requestsSession.get(f"https://letterboxd.com/film/{movieID}/details")
@@ -684,27 +734,31 @@ def getNumRatings(current, movieID, jsonData = None):
     return 0
 
 
-def getNumLikes(current, movieID, soup = None):
+def getNumLikes(current, movieID, soup = None, FILE_NAME = None):
     if not current:
-        if movieID in df['movieID'].values:
-            return df.loc[df['movieID'] == movieID, 'numLikes'].values[0]        
+        if FILE_NAME:
+            df = pd.read_csv(FILE_NAME) 
+            if movieID in df['movieID'].values:
+                return df.loc[df['movieID'] == movieID, 'numLikes'].values[0]        
         
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{movieID}/likes")
         soup = BeautifulSoup(response.text, 'lxml')
     
     result = 0
-    aTag = soup.find("a", href=f"/film/{movieID}/members/")
+    aTag = soup.find("a", href=f"/film/{movieID}/likes/")
     if aTag and aTag.has_attr("title"):
         result = int(''.join(filter(str.isdigit, aTag["title"])))
     return result
 
 
-def getNumFans(current, movieID, soup = None):
+def getNumFans(current, movieID, soup = None, FILE_NAME = None):
     if not current:
-        if movieID in df['movieID'].values:
-            return df.loc[df['movieID'] == movieID, 'numFans'].values[0]        
-        
+        if FILE_NAME:
+            df = pd.read_csv(FILE_NAME) 
+            if movieID in df['movieID'].values:
+                return df.loc[df['movieID'] == movieID, 'numFans'].values[0]        
+            
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{movieID}/likes")
         soup = BeautifulSoup(response.text, 'lxml')
@@ -716,10 +770,12 @@ def getNumFans(current, movieID, soup = None):
     return result
 
 
-def getNumListAppearances(current, movieID, soup = None):
+def getNumListAppearances(current, movieID, soup = None, FILE_NAME = None):
     if not current:
-        if movieID in df['movieID'].values:
-            return df.loc[df['movieID'] == movieID, 'numListAppearances'].values[0]        
+        if FILE_NAME:
+            df = pd.read_csv(FILE_NAME) 
+            if movieID in df['movieID'].values:
+                return df.loc[df['movieID'] == movieID, 'numListAppearances'].values[0]        
         
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com/film/{movieID}/likes")
@@ -732,11 +788,13 @@ def getNumListAppearances(current, movieID, soup = None):
     return result
     
 
-def getHistogram(current, movieID):
+def getHistogram(current, movieID, FILE_NAME = None):
     if not current:
-        if movieID in df['movieID'].values:
-            return [df.loc[df['movieID'] == movieID, 'num0_5StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num1StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num1_5StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num2StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num2_5StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num3StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num3_5StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num4StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num4_5StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num5StarRatings'].values[0]]
-    
+        if FILE_NAME:
+            df = pd.read_csv(FILE_NAME) 
+            if movieID in df['movieID'].values:
+                return [df.loc[df['movieID'] == movieID, 'num0_5StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num1StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num1_5StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num2StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num2_5StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num3StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num3_5StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num4StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num4_5StarRatings'].values[0], df.loc[df['movieID'] == movieID, 'num5StarRatings'].values[0]]
+        
     responseHistogram = requestsSession.get(f"https://letterboxd.com/csi/film/{movieID}/rating-histogram/")
     histogram = BeautifulSoup(responseHistogram.text, "lxml", parse_only=  SoupStrainer("li", class_="rating-histogram-bar"))
     
