@@ -31,6 +31,7 @@ getIndex = { # Maps a string ('3_5') to an index (7)
     "5": 9,
 }
 
+FILMS_PER_PAGE_WATCHED = 72
 
 # MISCELLANEOUS FUNCTIONS
 
@@ -208,7 +209,32 @@ def isMovie(iD, soup = None, FILE_NAME = None):
             
     return False
 
+# returns movies watched by user as a set of movieIDs
+def getMoviesWatched(username): # gets the ratings for a user
+    numMovies = getNumberMoviesWatched(username)
+    numPages = ceilDiv(numMovies, FILMS_PER_PAGE_WATCHED)
+    pageNum = 1
+    baseURL = f"https://letterboxd.com/{username}/films/by/entry-rating/page"
+    result = set()
     
+    while pageNum <= numPages:
+        response = requestsSession.get(f"{baseURL}/{pageNum}")
+        if response.status_code == 200:
+            poster_containers = BeautifulSoup(response.text, "html.parser", parse_only= SoupStrainer("li", class_="poster-container"))
+            with open("result.txt", "w") as f:
+                f.write(poster_containers.prettify())
+            if poster_containers:
+                for container in poster_containers:
+                    filmID = container.find("div", class_="really-lazy-load").get("data-film-slug")
+                    result.add(filmID)
+
+                pageNum += 1
+            else:
+                break
+        else:
+            break
+    return result
+
 # GET DETAILS THAT DON"T CHANGE
 #------------------------------------------------------------
 
@@ -805,3 +831,4 @@ def getHistogram(current, movieID, FILE_NAME = None):
         index = getIndex[starsToInt[element.text.split()[1]]]
         result[index] = num
     return result
+
