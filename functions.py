@@ -3,8 +3,22 @@ import pandas as pd
 from bs4 import BeautifulSoup, SoupStrainer
 import ast
 import json
+import time
 
 requestsSession = requests.Session()
+filmsPerPageDiary = 50
+OtherStarsToInt = {
+    "½": '0_5',
+    "★": '1',
+    "★½": '1_5',
+    "★★": '2',
+    "★★½": '2_5',
+    "★★★": '3',
+    "★★★½": '3_5',
+    "★★★★": '4',
+    "★★★★½": '4_5',
+    "★★★★★": '5',
+}
 
 starsToInt = { # Maps stars ('★★★½') to a string ('3_5')
     "half-★": '0_5',
@@ -165,19 +179,56 @@ def isMovieInDatabase(movieID, FILE_NAME):
 
 # returns the number of movies watched by a user
 def getNumberMoviesWatched(username):
-    # can return None
-    response = requestsSession.get(f"https://letterboxd.com/{username}/")
+    response = requestsSession.get(f"https://letterboxd.com/{username}/films")
     if response.status_code != 200:
         return None
     soup = BeautifulSoup(response.text, "lxml")
-    first_h4 = soup.find('h4', class_='profile-statistic')
-    if first_h4:
-        span_value = first_h4.find('span', class_='value')
-        if span_value:
-            text_inside_span = span_value.get_text()
-            numMovies = int(''.join(c for c in text_inside_span if c.isdigit()))
-            if numMovies:
-                return numMovies
+    aTag = soup.find('a', href=f"/{username}/films/", class_="tooltip")
+    if aTag:
+        title = aTag.get('title')
+        if title:
+            try:
+                return int(''.join(c for c in title if c.isdigit()))
+            except Exception as e:
+                return None
+
+
+def getNumberMoviesInDiary(username):
+    response = requestsSession.get(f"https://letterboxd.com/{username}/films")
+    if response.status_code != 200:
+        return None
+    soup = BeautifulSoup(response.text, "lxml")
+    aTag = soup.find('a', href=f"/{username}/films/diary/", class_="tooltip")
+    if aTag:
+        title = aTag.get('title')
+        if title:
+            try:
+                return int(''.join(c for c in title if c.isdigit()))
+            except Exception as e:
+                return None
+
+def getNumberReviews(username):
+    response = requestsSession.get(f"https://letterboxd.com/{username}/films")
+    if response.status_code != 200:
+        return None
+    soup = BeautifulSoup(response.text, "lxml")
+    aTag = soup.find('a', href=f"/{username}/films/reviews/", class_="tooltip")
+    if aTag:
+        title = aTag.get('title')
+        if title:
+            try:
+                return int(''.join(c for c in title if c.isdigit()))
+            except Exception as e:
+                return None
+
+
+def checkIfUserExists(username):
+  response = requestsSession.get(f"https://letterboxd.com/{username}/")
+  if response.status_code == 200:
+    return True
+  else:
+    return False
+
 
 # checks if movie is on Letterboxd
 def isValidMovie(filmID):
@@ -188,19 +239,18 @@ def isValidMovie(filmID):
     else:
         return False
 
+
 # checks if the given ID is a movie using the TMDB link 
 # soup can be any tab from the movie page except nanogenres, themes, and similar
-def isMovie(iD, soup = None, FILE_NAME = None):
+def isMovie(iD, soup = None, dfValues = None):
     # returns True or False
-    if FILE_NAME:
-        df = pd.read_csv(FILE_NAME) 
-        if iD in df['movieID'].values:
+    if dfValues is not None:
+        if iD in dfValues:
             return True
-    if not isValidMovie(iD):
-        return False
     if not soup:
         response = requestsSession.get(f"https://letterboxd.com{iD}")
         soup = BeautifulSoup(response.text, 'lxml')
+        
     tmdbLink = soup.find_all('a', attrs={'data-track-action': 'TMDb'})
     for link in tmdbLink:
         href = link.get('href')
@@ -235,6 +285,52 @@ def getMoviesWatched(username): # gets the ratings for a user
             break
     return result
 
+
+def checkIfUserExists(username):
+  response = requestsSession.get(f"https://letterboxd.com/{username}/")
+  if response.status_code == 200:
+    return True
+  else:
+    return False
+
+
+def getDiary(username, rating = False, date = False, spoiler = False, liked = False):
+    numDiary = getNumberMoviesInDiary(username)
+    numPages = ceilDiv(numDiary, filmsPerPageDiary)
+    baseURL = f"https://letterboxd.com/{username}/films/diary/page"
+    pageNumber = 1
+    result = []
+    while pageNumber <= numPages:
+        response = requestsSession.get(f"{baseURL}/{pageNumber}")
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, "lxml", parse_only=SoupStrainer('div', class_="site-body"))
+            movies = soup.find_all('tr', class_="diary-entry-row")
+            for movie in movies:
+                entry = {}
+                idTag = movie.find('td', class_="td-actions")
+                entry['movieID'] = idTag.get('data-film-slug')
+                
+                liked = False
+                tag = movie.find('span', class_="large-liked")
+                if tag:
+                    liked = True
+                entry['liked'] = liked
+                
+                if date or spoiler:
+                    tag = movie.find('a', class_="edit-review-button")
+                    if date:
+                        entry['date'] = tag.get('data-viewing-date')
+                    if spoiler:
+                        entry['spoiler'] = tag.get('data-contains-spoilers')
+                    
+                if rating:
+                    ratingTag = movie.find('span', class_='rating')
+                    entry['rating'] = ratingTag.text
+                result.append(entry)
+        pageNumber += 1
+
+    return result
+                    
 # GET DETAILS THAT DON"T CHANGE
 #------------------------------------------------------------
 
@@ -375,7 +471,7 @@ def getRuntime(filmID, soup = None, FILE_NAME = None):
             return df.loc[df['movieID'] == filmID, 'runtime'].values[0]
     
     if not soup:
-        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}/details")
+        response = requestsSession.get(f"https://letterboxd.com/film/{filmID}")
         soup = BeautifulSoup(response.text, 'lxml')
     
     result = None
