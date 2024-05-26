@@ -1,75 +1,41 @@
 from bs4 import BeautifulSoup, SoupStrainer
-import requests
-import argparse
+from functions import getDiary, checkIfUserExists, getTitle
 import time
-import pickle
+import requests
 
-def loadRatingsFomFile(filename): # loads ratings
-  try:
-    with open(filename, "rb") as file:
-      film_cache = pickle.load(file)
-  except FileNotFoundError:
-    film_cache = {}
-  return film_cache 
-
-def parseArguments():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("username")
-    args = parser.parse_args()
-    return args.username
-
-def checkIfUserExists(username):
-  response = requestsSession.get(f"https://letterboxd.com/{username}/")
-  if response.status_code == 200:
-    return True
-  else:
-    return False
+requestsSession = requests.Session()
+username = 'elisabetnorgard'
 
 start_time = time.time()
-FILM_CACHE_FILE = "pickles/film_cache.pickle"
-filmCache = loadRatingsFomFile(FILM_CACHE_FILE)
-username = parseArguments()
+if not checkIfUserExists(username):
+  print(f'User {username} does not exist')
+  exit()
+  
+result = getDiary(username)
 
-baseURL = f"https://letterboxd.com/{username}/films/diary/page"
-pageNumber = 1
-pageHasFilms = True
-result = {}
-requestsSession = requests.Session()
-
-while pageHasFilms:
-  response = requestsSession.get(f"{baseURL}/{pageNumber}")
-  if response.status_code == 200:
-    tbody = BeautifulSoup(response.text, "lxml", parse_only = SoupStrainer("tbody"))
-      
-    if tbody:
-      tr_with_class = tbody.find_all('tr', class_=True)
-      if tr_with_class:
-        tr_elements = tbody.find_all('tr')
-
-        for tr in tr_elements:
-          td_film_details = tr.find('td', class_='td-film-details')
-
-          if td_film_details:
-            div_film_slug = td_film_details.find('div',
-                                                {'data-film-slug': True})
-
-            if div_film_slug:
-              film_slug = div_film_slug['data-film-slug']
-              if film_slug in result:
-                result[film_slug] += 1
-              else:
-                result[film_slug] = 1
-        pageNumber += 1
-      else:
-        pageHasFilms = False
-    else:
-      pageHasFilms = False
+if len(result) == 0:
+  print(f'User {username} has not watched anything. Go watch something!')
+  exit()
+print(f"It took {time.time() - start_time} seconds to get the diary")
+start_time = time.time()
+freq = {}
+for entry in result:
+  if entry['movieID'] in freq:
+    freq[entry['movieID']] += 1
   else:
-    pageHasFilms = False
+    freq[entry['movieID']] = 1
+print(f"It took {time.time() - start_time} seconds to parse the diary")
+start_time = time.time()
 
-filtered_dict = {key: value for key, value in result.items() if value > 1}
+filtered_dict = {key: value for key, value in freq.items() if value > 1}
+
+if len(filtered_dict) == 0:
+  print(f'User {username} has not rewatched anything. Go rewatch something!')
+  exit()
+
 sorted_filtered_dict = dict(
     sorted(filtered_dict.items(), key=lambda item: item[1], reverse=True))
 
-print(sorted_filtered_dict)
-print("--- %s seconds ---" % (time.time() - start_time))
+for movie in sorted_filtered_dict:
+  print(f'{sorted_filtered_dict[movie]} times: {getTitle(movie, FILE_NAME = "movies.csv")}')
+print(f"It took {time.time() - start_time} seconds to filter and sort the movies")
