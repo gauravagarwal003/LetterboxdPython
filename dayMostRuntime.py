@@ -29,10 +29,10 @@ while pageNumber <= numPages:
         soup = BeautifulSoup(response.text, "lxml", parse_only=SoupStrainer('div', class_="site-body"))
         movies = soup.find_all('tr', class_="diary-entry-row")
         for movie in movies:
-            response = requestsSession.get(f"https://letterboxd.com/film/{movie}")
-            soup = BeautifulSoup(response.text, 'lxml')
             idTag = movie.find('td', class_="td-actions")
             id = idTag.get('data-film-slug')
+            response = requestsSession.get(f"https://letterboxd.com/film/{id}")
+            soup = BeautifulSoup(response.text, 'lxml')
 
             runtime = getRuntime(id, FILE_NAME = "movies.csv", soup = soup)
             if runtime and isMovie(id, dfValues= values, soup = soup):
